@@ -1,0 +1,172 @@
+# Builds the Consibio firmware envelopes in variants/ for a given Toit SDK version.
+#
+# The envelope tool, its Makefile and the build steps come from toitlang/envelopes,
+# checked out at the same tag as the SDK. Only the variant definitions live here.
+
+name: Build envelopes
+
+on:
+  workflow_dispatch:
+    inputs:
+      toit-version:
+        description: Toit SDK version to build for (e.g. v2.0.0-alpha.199)
+        required: true
+        type: string
+      variants:
+        description: Space-separated variants to build (default all in variants/)
+        required: false
+        type: string
+        default: ""
+      upload-release:
+        description: Publish the envelopes as a release named after the SDK version
+        required: true
+        type: boolean
+        default: false
+      envelopes-ref:
+        description: Ref of toitlang/envelopes to take the tool from (default the SDK tag, else main)
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-esp32:
+    name: "Build envelopes - ${{ inputs.toit-version }}"
+    runs-on: ubuntu-latest
+
+    env:
+      TOIT_VERSION: ${{ inputs.toit-version }}
+      TOIT_GIT_VERSION: ${{ inputs.toit-version }}
+      VARIANTS_ROOT: ${{ github.workspace }}/consibio/variants
+
+    steps:
+      - name: Check out the variants
+        uses: actions/checkout@v7
+        with:
+          path: consibio
+
+      - name: Resolve the envelope tool ref
+        run: |
+          REF="${{ inputs.envelopes-ref }}"
+          if [ -z "$REF" ]; then
+            if git ls-remote --exit-code --tags https://github.com/toitlang/envelopes "refs/tags/$TOIT_VERSION" > /dev/null; then
+              REF="$TOIT_VERSION"
+            else
+              REF=main
+            fi
+          fi
+          echo "Using toitlang/envelopes at $REF"
+          echo "ENVELOPES_REF=$REF" >> $GITHUB_ENV
+
+      - name: Check out the envelope tool
+        uses: actions/checkout@v7
+        with:
+          repository: toitlang/envelopes
+          ref: ${{ env.ENVELOPES_REF }}
+          path: upstream
+
+      - name: Fetch the Toit repository
+        working-directory: upstream
+        run: make TOIT_VERSION=$TOIT_VERSION download-toit
+
+      - name: Setup build dependencies
+        uses: ./upstream/toit/actions/setup-build
+        with:
+          toit-dir: upstream/toit
+          esp32: true
+
+      - name: Increase ccache max size
+        run: echo "CCACHE_MAXSIZE=600M" >> $GITHUB_ENV
+
+      - name: Build the host SDK
+        working-directory: upstream
+        run: make build-host
+
+      - name: Build the envelope tool
+        working-directory: upstream
+        run: |
+          build/host/sdk/bin/toit pkg install --project-root=tools
+          build/host/sdk/bin/toit compile -o build/envelope-tool tools/main.toit
+
+      - name: Select the variants
+        working-directory: upstream
+        run: |
+          VARIANTS="${{ inputs.variants }}"
+          if [ -z "$VARIANTS" ]; then
+            VARIANTS=$(build/envelope-tool list "$VARIANTS_ROOT" | tr '\n' ' ')
+          fi
+          echo "Variants: $VARIANTS"
+          echo "VARIANTS=$VARIANTS" >> $GITHUB_ENV
+
+      - name: Synthesize the variants
+        working-directory: upstream
+        run: |
+          build/envelope-tool synthesize \
+            --toit-root=toit \
+            --output-root=synthesized \
+            --sdk-path=build/host/sdk \
+            --variants-root="$VARIANTS_ROOT" \
+            --build-root=build \
+            $VARIANTS
+
+      - name: Build the variants
+        working-directory: upstream
+        run: |
+          export CCACHE_BASEDIR=$(pwd)
+          export CCACHE_NOHASHDIR=true
+          export CCACHE_SLOPPINESS=include_file_mtime,include_file_ctime,time_macros
+          for variant in $VARIANTS; do
+            echo "::group::Build $variant"
+            make -C "synthesized/$variant"
+            echo "::endgroup::"
+          done
+          ccache -s
+
+      - name: Package the envelopes and report sizes
+        working-directory: upstream
+        run: |
+          mkdir -p ../envelopes
+          {
+            echo "## Envelopes for Toit SDK $TOIT_VERSION"
+            echo
+            echo "Base image = firmware without application containers. Room for containers = ota_0 size minus base image."
+            echo
+            echo "| Variant | Base image (bytes) | ota_0 (bytes) | Room for containers (bytes) |"
+            echo "|---|---|---|---|"
+          } >> $GITHUB_STEP_SUMMARY
+          for variant in $VARIANTS; do
+            envelope="build/$variant/firmware.envelope"
+            build/host/sdk/bin/toit tool firmware -e "$envelope" extract --format=binary -o "build/$variant/base.bin"
+            base=$(stat -c %s "build/$variant/base.bin")
+            ota_hex=$(grep -E '^ota_0,' "$VARIANTS_ROOT/$variant/partitions.csv" 2>/dev/null | awk -F, '{gsub(/ /, "", $5); print $5}')
+            if [ -n "$ota_hex" ]; then
+              ota=$((ota_hex))
+              echo "| $variant | $base | $ota | $((ota - base)) |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $variant | $base | - | - |" >> $GITHUB_STEP_SUMMARY
+            fi
+            cp "$envelope" "../envelopes/firmware-$variant.envelope"
+            gzip -9 "../envelopes/firmware-$variant.envelope"
+          done
+          ls -la ../envelopes
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: envelopes-${{ inputs.toit-version }}
+          path: envelopes
+
+      - name: Release
+        if: ${{ inputs.upload-release }}
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: envelopes/*
+          body: |
+            Consibio envelopes for Toit SDK ${{ inputs.toit-version }}.
+            Built with the envelope tool from toitlang/envelopes@${{ env.ENVELOPES_REF }}.
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.toit-version }}
+          commit: ${{ github.sha }}
