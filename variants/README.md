@@ -16,4 +16,5 @@ patches when moving to a newer SDK.
 |---|---|---|
 | `esp32-consibio` | ESP32 | Bluetooth off, 0x1d0000 OTA partitions. Same as upstream. Kept for reference; too big for the Logger from alpha.195 on. |
 | `esp32-consibio-lite` | ESP32 | The Logger's envelope: `esp32-consibio` without Ethernet, WPA3 and unused TLS options, so it fits the OTA partition. See its README. |
-| `esp32s3-consibio-spiram-octo` | ESP32-S3 | Octal flash/SPIRAM, Bluetooth off, 0x1d0000 OTA partitions. Same as upstream. |
+| `esp32s3-consibio-spiram-octo` | ESP32-S3 | Octal flash/SPIRAM, Bluetooth off, 0x1d0000 OTA partitions. Same as upstream. Kept for reference. |
+| `esp32s3-consibio-spiram-octo-lite` | ESP32-S3 | The S3 Logger's envelope: `esp32s3-consibio-spiram-octo` with the same removals as `esp32-consibio-lite`. |
