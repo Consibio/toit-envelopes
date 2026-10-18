@@ -18,7 +18,7 @@ Run the **Build envelopes** workflow (Actions → Build envelopes → Run workfl
 - `envelopes-ref`: optional ref of `toitlang/envelopes` for the tool. Default: the
   tag matching `toit-version`, or `main` if there is none.
 
-The run summary lists, per variant, the size of the base image (firmware without
+The run summary and the job log list, per variant, the size of the base image (firmware without
 application containers) and how much of the `ota_0` partition is left for containers.
 
 Releases are published as
