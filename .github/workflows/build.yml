@@ -128,6 +128,7 @@ jobs:
         working-directory: upstream
         run: |
           mkdir -p ../envelopes
+          table=$(mktemp)
           {
             echo "## Envelopes for Toit SDK $TOIT_VERSION"
             echo
@@ -135,7 +136,7 @@ jobs:
             echo
             echo "| Variant | Base image (bytes) | ota_0 (bytes) | Room for containers (bytes) |"
             echo "|---|---|---|---|"
-          } >> $GITHUB_STEP_SUMMARY
+          } >> "$table"
           for variant in $VARIANTS; do
             envelope="build/$variant/firmware.envelope"
             build/host/sdk/bin/toit tool firmware -e "$envelope" extract --format=binary -o "build/$variant/base.bin"
@@ -143,13 +144,17 @@ jobs:
             ota_hex=$(grep -E '^ota_0,' "$VARIANTS_ROOT/$variant/partitions.csv" 2>/dev/null | awk -F, '{gsub(/ /, "", $5); print $5}')
             if [ -n "$ota_hex" ]; then
               ota=$((ota_hex))
-              echo "| $variant | $base | $ota | $((ota - base)) |" >> $GITHUB_STEP_SUMMARY
+              echo "| $variant | $base | $ota | $((ota - base)) |" >> "$table"
             else
-              echo "| $variant | $base | - | - |" >> $GITHUB_STEP_SUMMARY
+              echo "| $variant | $base | - | - |" >> "$table"
             fi
             cp "$envelope" "../envelopes/firmware-$variant.envelope"
             gzip -9 "../envelopes/firmware-$variant.envelope"
           done
+          # Write the table to both the run summary and the job log, so it can
+          # also be read from the log (e.g. through the API).
+          cat "$table" >> $GITHUB_STEP_SUMMARY
+          cat "$table"
           ls -la ../envelopes
 
       - name: Upload artifacts
