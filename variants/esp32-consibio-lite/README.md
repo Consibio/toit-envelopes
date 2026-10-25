@@ -11,8 +11,9 @@ Removed, with the measured saving at `v2.0.0-alpha.199`:
 | Ethernet (`CONFIG_TOIT_ENABLE_ETHERNET=n`, `CONFIG_ETH_USE_ESP32_EMAC=n`, `CONFIG_ETH_USE_SPI_ETHERNET=n`) | 49,808 |
 | WPA3 (`CONFIG_ESP_WIFI_ENABLE_WPA3_SAE=n`, `CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA=n`) | 25,680 |
 | Unused TLS options (see below) | 7,968 |
+| ESP-IDF logging (`CONFIG_LOG_DEFAULT_LEVEL_NONE=y` instead of `_ERROR`) | 94,336 |
 
-Base image at `v2.0.0-alpha.199`: 1,278,496 bytes, leaving 622,048 bytes of `ota_0`
+Base image at `v2.0.0-alpha.199`: 1,184,160 bytes, leaving 716,384 bytes of `ota_0`
 for application containers (`esp32-consibio`: 1,361,952 and 538,592).
 
 ## What this means for networks and servers
@@ -32,4 +33,10 @@ Brainpool curves. A server (including a customer's MQTT broker) must offer:
 Any mainstream broker or cloud endpoint meets this. Toit's `crypto.ec` curves
 (P-256, P-384, P-521) are kept.
 
-ESP-IDF logging is left at Toit's default (errors only).
+## Logging
+
+ESP-IDF logging is off. ESP-IDF's error messages (Wi-Fi, flash/OTA, peripherals,
+sleep, Toit's C runtime) no longer appear on the serial console. Crash dumps and
+backtraces, Toit and Artemis logs, and everything the device sends to the cloud are
+unaffected. For bench debugging, use `esp32-consibio-lite-debug`, which is identical
+except that it keeps ESP-IDF error messages.

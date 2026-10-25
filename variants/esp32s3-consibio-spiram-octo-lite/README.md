@@ -10,6 +10,10 @@ devices in the field:
 - WPA3 (`CONFIG_ESP_WIFI_ENABLE_WPA3_SAE=n`, `CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA=n`).
 - Unused TLS options: PSK key exchanges, DHE-RSA, static ECDH, AES-CCM suites, and
   the secp192/224, secp*k1 and Brainpool curves.
+- ESP-IDF logging (`CONFIG_LOG_DEFAULT_LEVEL_NONE=y`), which saves 98,976 bytes. Base image
+  at `v2.0.0-alpha.199`: 1,180,832 bytes, leaving 719,712 bytes of `ota_0` for containers.
+  For bench debugging with ESP-IDF error messages on the serial console, use
+  `esp32s3-consibio-spiram-octo-lite-debug`.
 
 The network and server requirements are the same as for `esp32-consibio-lite`; see
 its README. The partition table is identical to `esp32s3-consibio-spiram-octo`.
