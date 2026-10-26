@@ -27,6 +27,11 @@ on:
         required: false
         type: string
         default: ""
+      overwrite-existing:
+        description: Replace envelopes already published in the release (changes what existing URLs serve)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -46,6 +51,39 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: consibio
+
+      - name: Check that published envelopes are not overwritten
+        if: ${{ inputs.upload-release && !inputs.overwrite-existing }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Published envelope URLs are cached by the Artemis CLI and referenced by
+          # pods, so their contents must not change silently. Fail before building
+          # if any envelope this run would publish already exists in the release.
+          VARIANTS="${{ inputs.variants }}"
+          if [ -z "$VARIANTS" ]; then
+            VARIANTS=$(cd "$VARIANTS_ROOT" && for d in */; do echo "${d%/}"; done)
+          fi
+          if OUT=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TOIT_VERSION" --jq '.assets[].name' 2>&1); then
+            EXISTING="$OUT"
+          elif echo "$OUT" | grep -q "HTTP 404"; then
+            echo "No release $TOIT_VERSION yet; nothing to overwrite."
+            exit 0
+          else
+            echo "::error::Could not read release $TOIT_VERSION: $OUT"
+            exit 1
+          fi
+          CONFLICTS=""
+          for variant in $VARIANTS; do
+            if echo "$EXISTING" | grep -qx "firmware-$variant.envelope.gz"; then
+              CONFLICTS="$CONFLICTS firmware-$variant.envelope.gz"
+            fi
+          done
+          if [ -n "$CONFLICTS" ]; then
+            echo "::error::Release $TOIT_VERSION already has:$CONFLICTS. Build only new variants (the 'variants' input), or set 'overwrite-existing' if replacing them is intended (clear the Artemis envelope cache afterwards)."
+            exit 1
+          fi
+          echo "No published envelopes would be overwritten."
 
       - name: Resolve the envelope tool ref
         run: |
@@ -172,6 +210,7 @@ jobs:
             Consibio envelopes for Toit SDK ${{ inputs.toit-version }}.
             Built with the envelope tool from toitlang/envelopes@${{ env.ENVELOPES_REF }}.
           allowUpdates: true
+          replacesArtifacts: ${{ inputs.overwrite-existing }}
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ inputs.toit-version }}
           commit: ${{ github.sha }}

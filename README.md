@@ -15,6 +15,12 @@ Run the **Build envelopes** workflow (Actions → Build envelopes → Run workfl
 - `toit-version`: the Toit SDK version, e.g. `v2.0.0-alpha.199`.
 - `variants`: optional, space-separated. Default: every variant in `variants/`.
 - `upload-release`: publish the envelopes as a release named after the SDK version.
+- `overwrite-existing`: allow replacing envelopes that are already published in that
+  release. Off by default: the run fails early if it would overwrite one. Published
+  envelope URLs should keep their contents, because pods reference them and the Artemis
+  CLI caches them by URL. To add a variant to an existing release, build only that
+  variant with `variants`. If you do overwrite, clear
+  `~/.cache/artemis/envelopes/github.com/Consibio/toit-envelopes` before rebuilding pods.
 - `envelopes-ref`: optional ref of `toitlang/envelopes` for the tool. Default: the
   tag matching `toit-version`, or `main` if there is none.
 
